@@ -2,15 +2,18 @@
 
 ## Reusable Workflow Example
 
-reuse build-and-push-image.yml
+Create .github/workflows/build-and-push-image.yml file:
 ```yaml
 name: Build and push image
 
 on:
-  workflow_call:
+  workflow_dispatch:
 
 jobs:
   build-and-push-image:
+    permissions:
+      contents: read
+      packages: write
     uses: chenwei791129/.github/.github/workflows/build-and-push-image.yml@main
 ```
 
