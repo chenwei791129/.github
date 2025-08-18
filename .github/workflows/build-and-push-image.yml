@@ -1,5 +1,7 @@
 name: Build and push image
 
+# Reference: https://github.com/marketplace/actions/build-and-push-docker-images
+
 on:
   workflow_call:
     inputs:
