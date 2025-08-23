@@ -5,16 +5,15 @@ name: Build and push image
 on:
   workflow_call:
     inputs:
-      dockerhub-username:
-        description: 'Docker Hub username'
-        required: false
-        type: string
       dockerhub-repository:
         description: 'Docker Hub repository name (e.g., username/repository)'
         required: false
         type: string
     secrets:
-      dockerhub-token:
+      DOCKERHUB_USER:
+        description: 'Docker Hub access username'
+        required: false
+      DOCKERHUB_TOKEN:
         description: 'Docker Hub access token'
         required: false
   push:
@@ -60,11 +59,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Login to Docker Hub
-        if: github.event_name != 'pull_request' && inputs.dockerhub-username && secrets.dockerhub-token
+        if: github.event_name != 'pull_request' && inputs.dockerhub-repository
         uses: docker/login-action@v3
         with:
-          username: ${{ inputs.dockerhub-username }}
-          password: ${{ secrets.dockerhub-token }}
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
