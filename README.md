@@ -33,9 +33,9 @@ jobs:
     uses: chenwei791129/.github/.github/workflows/build-and-push-image.yml@main
     with:
       dockerhub-username: your-dockerhub-username
-      dockerhub-repository: your-dockerhub-username/your-repository
-    secrets:
-      dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+    additional-tags: |
+      type=raw,value=custom-tag
+      type=raw,value=custom-tag2
 ```
 
 ## References

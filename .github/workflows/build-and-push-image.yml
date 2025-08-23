@@ -9,6 +9,10 @@ on:
         description: 'Docker Hub repository name (e.g., username/repository)'
         required: false
         type: string
+      additional-tags:
+        description: 'Additional tags for the image (one per line)'
+        required: false
+        type: string
     secrets:
       DOCKERHUB_USER:
         description: 'Docker Hub access username'
@@ -44,6 +48,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            ${{ inputs.additional-tags }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
