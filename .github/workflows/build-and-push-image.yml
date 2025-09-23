@@ -67,11 +67,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Debug Docker Hub secrets
+      - name: Debug Docker Hub variables
         run: |
           echo "DOCKERHUB_USER exists: ${{ secrets.DOCKERHUB_USER != '' }}"
           echo "DOCKERHUB_TOKEN exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
           echo "dockerhub-repository input: ${{ inputs.dockerhub-repository }}"
+          echo "build-args input: ${{ inputs.build-args }}"
       - name: Login to Docker Hub
         env:
           DOCKERHUB_USER_ISSET: ${{ secrets.DOCKERHUB_USER != '' }}
