@@ -72,7 +72,7 @@ jobs:
         env:
           DOCKERHUB_USER_ISSET: ${{ secrets.DOCKERHUB_USER != '' }}
           DOCKERHUB_TOKEN_ISSET: ${{ secrets.DOCKERHUB_TOKEN != '' }}
-        if: github.event_name != 'pull_request' && inputs.dockerhub-repository && env.DOCKERHUB_USER_ISSET && env.DOCKERHUB_TOKEN_ISSET
+        if: github.event_name != 'pull_request' && inputs.dockerhub-repository && env.DOCKERHUB_USER_ISSET == 'true' && env.DOCKERHUB_TOKEN_ISSET == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USER }}
