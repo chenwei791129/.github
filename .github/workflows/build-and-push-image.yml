@@ -13,6 +13,10 @@ on:
         description: 'Additional tags for the image (one per line)'
         required: false
         type: string
+      build-args:
+        description: 'Build arguments (one per line, format: ARG=value)'
+        required: false
+        type: string
     secrets:
       DOCKERHUB_USER:
         description: 'Docker Hub access username'
@@ -85,3 +89,4 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           platforms: |
             linux/amd64,linux/arm64
+          build-args: ${{ inputs.build-args }}
