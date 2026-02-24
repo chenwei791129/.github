@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: true
+      enable-latest-tag:
+        description: 'Enable latest tag'
+        required: false
+        type: boolean
+        default: true
       build-args:
         description: 'Build arguments (one per line, format: ARG=value)'
         required: false
@@ -52,6 +57,8 @@ jobs:
           images: |
             ghcr.io/${{ github.repository }}
             ${{ inputs.dockerhub-repository && inputs.dockerhub-repository || '' }}
+          flavor: |
+            latest=${{ inputs.enable-latest-tag && 'auto' || 'false' }}
           tags: |
             ${{ inputs.enable-branch-tag && 'type=ref,event=branch' || '' }}
             type=ref,event=pr
