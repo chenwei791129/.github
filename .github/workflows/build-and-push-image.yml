@@ -13,6 +13,11 @@ on:
         description: 'Additional tags for the image (one per line)'
         required: false
         type: string
+      enable-branch-tag:
+        description: 'Enable branch name tag (type=ref,event=branch)'
+        required: false
+        type: boolean
+        default: true
       build-args:
         description: 'Build arguments (one per line, format: ARG=value)'
         required: false
@@ -48,7 +53,7 @@ jobs:
             ghcr.io/${{ github.repository }}
             ${{ inputs.dockerhub-repository && inputs.dockerhub-repository || '' }}
           tags: |
-            type=ref,event=branch
+            ${{ inputs.enable-branch-tag && 'type=ref,event=branch' || '' }}
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
