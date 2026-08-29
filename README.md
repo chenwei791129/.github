@@ -51,6 +51,26 @@ Other inputs: `enable-branch-tag`, `enable-latest-tag`, `context`, `platforms`
 Images are pushed to ghcr.io only — Docker Hub support was removed deliberately,
 so no registry secrets are needed beyond the automatic `GITHUB_TOKEN`.
 
+### Signing the published image
+
+`sign-image: true` keylessly signs the pushed digest with cosign. The calling job
+must additionally grant `id-token: write`, which cosign exchanges for an
+ephemeral certificate from the sigstore community Fulcio instance:
+```yaml
+jobs:
+  build-and-push-image:
+    permissions:
+      contents: read
+      packages: write
+      id-token: write    # cosign keyless signing
+    uses: chenwei791129/.github/.github/workflows/build-and-push-image.yml@main
+    with:
+      sign-image: true
+```
+
+Signing is skipped on `pull_request`, where nothing is pushed. `cosign-version`
+pins the cosign release to install (default `v3.1.3`).
+
 ### Trivy vulnerability scan
 
 Create .github/workflows/trivy.yml file:
