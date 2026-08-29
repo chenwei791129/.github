@@ -1,16 +1,33 @@
 name: Build and push image
 
+# Shared multi-platform image build for all repositories under this account.
+# Callers invoke it with `uses:` so the pinned action SHAs live in exactly one
+# place — bumping an action here upgrades every caller on its next run.
+#
+# Publishes to ghcr.io only. Docker Hub support was removed deliberately: its
+# pull-rate and retention limits keep tightening, and ghcr.io is the single
+# registry this account now targets.
+#
+# Supply-chain hardening: every third-party action is pinned to a full commit
+# SHA (not a floating tag) so a compromised/retagged release cannot be pulled
+# into the runner. The trailing comment records the human-readable version that
+# SHA corresponds to. When bumping, re-resolve the SHA from the upstream tag
+# (e.g. `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`).
+#
 # Reference: https://github.com/marketplace/actions/build-and-push-docker-images
-
 on:
   workflow_call:
     inputs:
-      dockerhub-repository:
-        description: 'Docker Hub repository name (e.g., username/repository)'
+      image-name:
+        description: >-
+          Image path under ghcr.io, without the registry host
+          (e.g. "chenwei791129/godaddy-ddns"). Defaults to the calling
+          repository's owner/name.
         required: false
         type: string
+        default: ''
       additional-tags:
-        description: 'Additional tags for the image (one per line)'
+        description: 'Extra docker/metadata-action tag rules (one per line)'
         required: false
         type: string
       enable-branch-tag:
@@ -23,83 +40,82 @@ on:
         required: false
         type: boolean
         default: true
+      enable-semver-tags:
+        description: >-
+          Enable the default semver tag rules ({{version}} and
+          {{major}}.{{minor}}). Turn off to define a different semver shape
+          entirely through additional-tags.
+        required: false
+        type: boolean
+        default: true
       build-args:
         description: 'Build arguments (one per line, format: ARG=value)'
         required: false
         type: string
-    secrets:
-      DOCKERHUB_USER:
-        description: 'Docker Hub access username'
+      context:
+        description: 'Build context path'
         required: false
-      DOCKERHUB_TOKEN:
-        description: 'Docker Hub access token'
+        type: string
+        default: '.'
+      platforms:
+        description: 'Comma-separated target platforms'
         required: false
-  push:
-    branches: [ $default-branch ]
-    tags: ['*']
-  pull_request:
-    branches: [ $default-branch ]
-
-permissions:
-  contents: read
-  packages: write
+        type: string
+        default: linux/amd64,linux/arm64
+      runs-on:
+        description: 'Runner label for the build job'
+        required: false
+        type: string
+        default: ubuntu-latest
 
 jobs:
   build-multiple-platform:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
-            ghcr.io/${{ github.repository }}
-            ${{ inputs.dockerhub-repository && inputs.dockerhub-repository || '' }}
+            ghcr.io/${{ inputs.image-name != '' && inputs.image-name || github.repository }}
           flavor: |
             latest=${{ inputs.enable-latest-tag && 'auto' || 'false' }}
           tags: |
             ${{ inputs.enable-branch-tag && 'type=ref,event=branch' || '' }}
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            ${{ inputs.enable-semver-tags && 'type=semver,pattern={{version}}' || '' }}
+            ${{ inputs.enable-semver-tags && 'type=semver,pattern={{major}}.{{minor}}' || '' }}
             ${{ inputs.additional-tags }}
+
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
         with:
-          platforms: |
-            linux/amd64,linux/arm64
+          platforms: ${{ inputs.platforms }}
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      # Skipped on pull_request: the build still runs as a compile check, but
+      # nothing is pushed, so no registry credentials are needed there.
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Debug Docker Hub variables
-        run: |
-          echo "DOCKERHUB_USER exists: ${{ secrets.DOCKERHUB_USER != '' }}"
-          echo "DOCKERHUB_TOKEN exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
-          echo "dockerhub-repository input: ${{ inputs.dockerhub-repository }}"
-          echo "build-args input: ${{ inputs.build-args }}"
-      - name: Login to Docker Hub
-        env:
-          DOCKERHUB_USER_ISSET: ${{ secrets.DOCKERHUB_USER != '' }}
-          DOCKERHUB_TOKEN_ISSET: ${{ secrets.DOCKERHUB_TOKEN != '' }}
-        if: github.event_name != 'pull_request' && inputs.dockerhub-repository && env.DOCKERHUB_USER_ISSET == 'true' && env.DOCKERHUB_TOKEN_ISSET == 'true'
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USER }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
+          context: ${{ inputs.context }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: |
-            linux/amd64,linux/arm64
+          platforms: ${{ inputs.platforms }}
           build-args: ${{ inputs.build-args }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
