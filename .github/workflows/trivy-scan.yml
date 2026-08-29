@@ -1,0 +1,91 @@
+name: Trivy Scan
+
+# Shared Trivy scan for all repositories under this account. Callers invoke it
+# with `uses:` so the pinned action SHAs live in exactly one place — bumping
+# Trivy here upgrades every caller on its next run.
+#
+# Supply-chain hardening: every third-party action is pinned to a full commit
+# SHA (not a floating tag) so a compromised/retagged release cannot be pulled
+# into the runner. The trailing comment records the human-readable version that
+# SHA corresponds to. When bumping, re-resolve the SHA from the upstream tag
+# (e.g. `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`).
+on:
+  workflow_call:
+    inputs:
+      scan-type:
+        description: 'Trivy scan type: fs, image, repo, rootfs, config or sbom'
+        required: false
+        type: string
+        default: fs
+      scan-ref:
+        description: 'Scan target: a path for fs/config, an image reference for image'
+        required: false
+        type: string
+        default: '.'
+      scanners:
+        description: 'Comma-separated scanners: vuln, secret, misconfig, license'
+        required: false
+        type: string
+        default: vuln
+      severity:
+        description: 'Comma-separated severities to report'
+        required: false
+        type: string
+        default: HIGH,CRITICAL
+      exit-code:
+        description: 'Exit code of the gating scan; "0" reports without failing the job'
+        required: false
+        type: string
+        default: '1'
+      upload-sarif:
+        description: >-
+          Run an extra non-failing pass and upload SARIF to the Security tab.
+          Requires `security-events: write` on the calling job, and GitHub
+          Advanced Security on private repositories.
+        required: false
+        type: boolean
+        default: false
+      runs-on:
+        description: 'Runner label for the scan job'
+        required: false
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  trivy:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # First pass: produce SARIF without failing the job, so results always
+      # reach the Security tab even when vulnerabilities are present.
+      - name: Trivy scan (SARIF report)
+        if: inputs.upload-sarif
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: ${{ inputs.scan-type }}
+          scan-ref: ${{ inputs.scan-ref }}
+          scanners: ${{ inputs.scanners }}
+          severity: ${{ inputs.severity }}
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+
+      - name: Upload SARIF to Security tab
+        if: ${{ always() && inputs.upload-sarif }}
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: trivy-results.sarif
+
+      # Second pass: gate the build. Reuses Trivy's cache from the first pass,
+      # so this is fast. Table output keeps the Actions log human-readable.
+      - name: Trivy scan (gating)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: ${{ inputs.scan-type }}
+          scan-ref: ${{ inputs.scan-ref }}
+          scanners: ${{ inputs.scanners }}
+          severity: ${{ inputs.severity }}
+          format: table
+          exit-code: ${{ inputs.exit-code }}
