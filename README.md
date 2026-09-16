@@ -48,6 +48,28 @@ jobs:
 Other inputs: `enable-branch-tag`, `enable-latest-tag`, `context`, `platforms`
 (default `linux/amd64,linux/arm64`) and `runs-on`.
 
+### Building an image variant from another Dockerfile
+
+`file` selects a Dockerfile other than `<context>/Dockerfile`. Call the workflow
+once per variant, and give each variant's tags a per-rule `suffix=` so they do not
+collide with the default image:
+```yaml
+jobs:
+  build-fat:
+    permissions:
+      contents: read
+      packages: write
+    uses: chenwei791129/.github/.github/workflows/build-and-push-image.yml@main
+    with:
+      file: Dockerfile.fat
+      enable-branch-tag: false
+      enable-latest-tag: false
+      enable-semver-tags: false
+      additional-tags: |
+        type=semver,pattern={{version}},suffix=-fat
+        type=raw,value=fat,enable={{is_default_branch}}
+```
+
 Images are pushed to ghcr.io only — Docker Hub support was removed deliberately,
 so no registry secrets are needed beyond the automatic `GITHUB_TOKEN`.
 

@@ -57,6 +57,14 @@ on:
         required: false
         type: string
         default: '.'
+      file:
+        description: >-
+          Dockerfile path, relative to the repository root. Defaults to
+          `Dockerfile` inside the build context. Set it to build a variant
+          image (e.g. "Dockerfile.fat") from the same context.
+        required: false
+        type: string
+        default: ''
       platforms:
         description: 'Comma-separated target platforms'
         required: false
@@ -129,18 +137,22 @@ jobs:
         with:
           cosign-release: ${{ inputs.cosign-version }}
 
+      # A variant built from a non-default Dockerfile gets its own gha cache
+      # scope; sharing the default scope would make each variant's cache export
+      # overwrite the other's. Callers that leave `file` unset keep the default.
       - name: Build and push
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ inputs.platforms }}
           build-args: ${{ inputs.build-args }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha${{ inputs.file != '' && format(',scope={0}', inputs.file) || '' }}
+          cache-to: type=gha,mode=max${{ inputs.file != '' && format(',scope={0}', inputs.file) || '' }}
 
       # Sign the digest rather than the tags: a tag can be moved to a different
       # image later, a digest cannot. Keyless signing provisions an ephemeral
