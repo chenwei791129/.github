@@ -1,5 +1,9 @@
 # .github
 
+Shared GitHub Actions workflows and default community health files
+(`SECURITY.md`) for every repository under this account. Every job writes a
+report to the run's step summary.
+
 ## Reusable Workflow Example
 
 ### Build and push to ghcr.io registry
@@ -143,6 +147,73 @@ jobs:
       scanners: secret
       severity: CRITICAL,HIGH
 ```
+
+### release-please
+
+Runs [release-please](https://github.com/googleapis/release-please-action) and
+exposes its outputs so build/upload jobs can chain on them. Create
+.github/workflows/release-please.yml file:
+```yaml
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    permissions:
+      contents: write        # create the release and tag
+      issues: write          # label the release PR
+      pull-requests: write   # open/update the release PR
+    uses: chenwei791129/.github/.github/workflows/release-please.yml@main
+    with:
+      release-type: go
+
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-26.04
+    steps:
+      - run: echo "Building ${{ needs.release-please.outputs.tag_name }}"
+```
+
+Leave `release-type` empty to use the repository's `release-please-config.json`
+and `.release-please-manifest.json` (manifest mode). `target-branch` is needed
+only when the default branch is not the one that triggered the workflow (e.g.
+`master`). Pass `secrets: { token: ${{ secrets.MY_RELEASE_PLEASE_TOKEN }} }`
+when the branch is protected or when the created release must trigger other
+workflows; the default `GITHUB_TOKEN` cannot do either.
+
+Outputs: `release_created`, `tag_name`, `version`, `sha`, `html_url`,
+`upload_url`, `prs_created`, `pr`.
+
+### Go test
+
+Create .github/workflows/go-test.yml file:
+```yaml
+name: Test
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    permissions:
+      contents: read
+    uses: chenwei791129/.github/.github/workflows/go-test.yml@main
+```
+
+Inputs: `go-version-file` (default `go.mod`), `working-directory`, `test-args`
+(default `./...`; `-count=1` is always added), `vet` (run `go vet` first),
+`cache` and `runs-on`.
 
 ## References
 
