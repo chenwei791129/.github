@@ -79,8 +79,10 @@ jobs:
           sarif_file: trivy-results.sarif
 
       # Second pass: gate the build. Reuses Trivy's cache from the first pass,
-      # so this is fast. Table output keeps the Actions log human-readable.
+      # so this is fast. The table is written to a file so the summary step can
+      # publish it, and echoed back to the log so the log stays readable.
       - name: Trivy scan (gating)
+        id: gating
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: ${{ inputs.scan-type }}
@@ -88,4 +90,45 @@ jobs:
           scanners: ${{ inputs.scanners }}
           severity: ${{ inputs.severity }}
           format: table
+          output: trivy-gating.txt
           exit-code: ${{ inputs.exit-code }}
+
+      - name: Write job summary
+        if: ${{ always() && steps.gating.outcome != 'skipped' }}
+        env:
+          GATING_OUTCOME: ${{ steps.gating.outcome }}
+          SCAN_TYPE: ${{ inputs.scan-type }}
+          SCAN_REF: ${{ inputs.scan-ref }}
+          SCANNERS: ${{ inputs.scanners }}
+          SEVERITY: ${{ inputs.severity }}
+          UPLOAD_SARIF: ${{ inputs.upload-sarif }}
+        run: |
+          if [[ -f trivy-gating.txt ]]; then
+            cat trivy-gating.txt
+          fi
+          {
+            echo "## Trivy scan"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Result | ${GATING_OUTCOME} |"
+            echo "| Scan type | \`${SCAN_TYPE}\` |"
+            echo "| Target | \`${SCAN_REF}\` |"
+            echo "| Scanners | \`${SCANNERS}\` |"
+            echo "| Severity | \`${SEVERITY}\` |"
+            if [[ "${UPLOAD_SARIF}" == "true" && -f trivy-results.sarif ]]; then
+              echo "| SARIF findings | $(jq '[.runs[].results[]] | length' trivy-results.sarif) (uploaded to Security tab) |"
+            fi
+            echo
+            if [[ -s trivy-gating.txt ]]; then
+              echo "<details><summary>Report</summary>"
+              echo
+              echo '```'
+              cat trivy-gating.txt
+              echo '```'
+              echo
+              echo "</details>"
+            else
+              echo "No findings at the configured severity."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"

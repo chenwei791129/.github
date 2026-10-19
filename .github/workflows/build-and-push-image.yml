@@ -164,3 +164,33 @@ jobs:
           TAGS: ${{ steps.meta.outputs.tags }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: echo "$TAGS" | xargs -I {} cosign sign --yes {}@"$DIGEST"
+
+      - name: Write job summary
+        if: ${{ always() && steps.build.outcome != 'skipped' }}
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          PUSHED: ${{ github.event_name != 'pull_request' }}
+          SIGNED: ${{ inputs.sign-image && github.event_name != 'pull_request' }}
+          PLATFORMS: ${{ inputs.platforms }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          {
+            echo "## Build and push image"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Build | ${BUILD_OUTCOME} |"
+            echo "| Pushed | ${PUSHED} |"
+            echo "| Signed (cosign) | ${SIGNED} |"
+            echo "| Platforms | \`${PLATFORMS}\` |"
+            if [[ -n "${DIGEST}" ]]; then
+              echo "| Digest | \`${DIGEST}\` |"
+            fi
+            echo
+            echo "### Tags"
+            echo
+            while IFS= read -r tag; do
+              [[ -n "${tag}" ]] && echo "- \`${tag}\`"
+            done <<< "${TAGS}"
+          } >> "${GITHUB_STEP_SUMMARY}"
