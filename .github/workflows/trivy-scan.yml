@@ -45,6 +45,11 @@ on:
         required: false
         type: boolean
         default: false
+      category:
+        description: 'SARIF analysis category; empty uses trivy-<scan-type>. Set distinct values for multiple scans of the same type.'
+        required: false
+        type: string
+        default: ''
       runs-on:
         description: 'Runner label for the scan job'
         required: false
@@ -77,6 +82,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: trivy-results.sarif
+          category: ${{ inputs.category || format('trivy-{0}', inputs.scan-type) }}
 
       # Second pass: gate the build. Reuses Trivy's cache from the first pass,
       # so this is fast. The table is written to a file so the summary step can

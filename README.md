@@ -127,6 +127,30 @@ jobs:
 report to the Security tab. The calling job must grant `security-events: write`,
 and private repositories additionally need GitHub Advanced Security.
 
+SARIF uploads use category `trivy-<scan-type>` by default (for example,
+`trivy-fs` and `trivy-image`), so repository and image scans from the same
+calling workflow do not overwrite one another. Existing callers need no changes.
+The optional string input `category` overrides this value; omitting it or passing
+an empty string uses the default. It only affects SARIF uploads, not the gating
+scan or job summary.
+
+When calling the workflow more than once with the same scan type (for example,
+two images, or separate vulnerability and secret scans), give each call a
+unique, stable category:
+
+```yaml
+    with:
+      scan-type: image
+      scan-ref: ghcr.io/owner/app:latest
+      upload-sarif: true
+      category: trivy-image-app
+```
+
+After adopting this change, verify the distinct analysis categories in the
+caller's Security tab after a scheduled or manual run. The initial category
+change may leave the old analysis visible; review it separately rather than
+assuming the new category removes historical results.
+
 ### Trivy secret scan
 
 Create .github/workflows/secret-scan.yml file:
