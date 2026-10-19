@@ -1,0 +1,141 @@
+name: Release Please
+
+# Shared release-please entry point for all repositories under this account.
+# Callers invoke it with `uses:` so the pinned action SHA lives in exactly one
+# place — bumping release-please here upgrades every caller on its next run.
+# Build/upload jobs stay in the calling workflow and chain on the outputs:
+#
+#   jobs:
+#     release-please:
+#       permissions:
+#         contents: write
+#         issues: write
+#         pull-requests: write
+#       uses: chenwei791129/.github/.github/workflows/release-please.yml@main
+#       with:
+#         release-type: go
+#     build:
+#       needs: release-please
+#       if: ${{ needs.release-please.outputs.release_created == 'true' }}
+#       ...
+#
+# Permissions come from the calling job. `issues: write` is needed because
+# release-please labels the release PR (`autorelease: pending/tagged`).
+#
+# Supply-chain hardening: the action is pinned to a full commit SHA (not a
+# floating tag) so a compromised/retagged release cannot be pulled into the
+# runner. The trailing comment records the human-readable version that SHA
+# corresponds to. When bumping, re-resolve the SHA from the upstream tag
+# (e.g. `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`).
+on:
+  workflow_call:
+    inputs:
+      release-type:
+        description: >-
+          release-please release type (go, node, python, simple, ...). Leave
+          empty to use release-please-config.json / .release-please-manifest.json
+          from the repository (manifest mode).
+        required: false
+        type: string
+        default: ''
+      target-branch:
+        description: 'Branch to open the release PR against; detected from the triggering ref by default'
+        required: false
+        type: string
+        default: ''
+      config-file:
+        description: 'Manifest-mode config file; the action default is release-please-config.json'
+        required: false
+        type: string
+        default: ''
+      manifest-file:
+        description: 'Manifest-mode manifest file; the action default is .release-please-manifest.json'
+        required: false
+        type: string
+        default: ''
+      runs-on:
+        description: 'Runner label for the release job'
+        required: false
+        type: string
+        default: ubuntu-26.04
+    secrets:
+      token:
+        description: >-
+          Token used to open the release PR and create the release. Pass a PAT
+          when the default branch is protected or when the release must
+          trigger other workflows; defaults to the workflow GITHUB_TOKEN.
+        required: false
+    outputs:
+      release_created:
+        description: '"true" when a GitHub release was created in this run'
+        value: ${{ jobs.release-please.outputs.release_created }}
+      tag_name:
+        description: 'Tag of the created release (e.g. v1.2.3)'
+        value: ${{ jobs.release-please.outputs.tag_name }}
+      version:
+        description: 'Version of the created release without the v prefix'
+        value: ${{ jobs.release-please.outputs.version }}
+      sha:
+        description: 'Commit SHA the release was tagged on'
+        value: ${{ jobs.release-please.outputs.sha }}
+      html_url:
+        description: 'URL of the created release'
+        value: ${{ jobs.release-please.outputs.html_url }}
+      upload_url:
+        description: 'Asset upload URL of the created release'
+        value: ${{ jobs.release-please.outputs.upload_url }}
+      prs_created:
+        description: '"true" when a release PR was created or updated'
+        value: ${{ jobs.release-please.outputs.prs_created }}
+      pr:
+        description: 'JSON of the release PR that was created or updated'
+        value: ${{ jobs.release-please.outputs.pr }}
+
+jobs:
+  release-please:
+    runs-on: ${{ inputs.runs-on }}
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+      sha: ${{ steps.release.outputs.sha }}
+      html_url: ${{ steps.release.outputs.html_url }}
+      upload_url: ${{ steps.release.outputs.upload_url }}
+      prs_created: ${{ steps.release.outputs.prs_created }}
+      pr: ${{ steps.release.outputs.pr }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.token != '' && secrets.token || github.token }}
+          release-type: ${{ inputs.release-type }}
+          target-branch: ${{ inputs.target-branch }}
+          config-file: ${{ inputs.config-file }}
+          manifest-file: ${{ inputs.manifest-file }}
+
+      - name: Write job summary
+        if: ${{ always() }}
+        env:
+          RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          HTML_URL: ${{ steps.release.outputs.html_url }}
+          PRS_CREATED: ${{ steps.release.outputs.prs_created }}
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: |
+          {
+            echo "## Release Please"
+            echo
+            if [[ "${RELEASE_CREATED}" == "true" ]]; then
+              echo "- Release created: [${TAG_NAME}](${HTML_URL})"
+            else
+              echo "- Release created: no"
+            fi
+            if [[ "${PRS_CREATED}" == "true" && -n "${PR_JSON}" ]]; then
+              pr_number="$(jq -r '.number // empty' <<< "${PR_JSON}")"
+              pr_title="$(jq -r '.title // empty' <<< "${PR_JSON}")"
+              echo "- Release PR: [#${pr_number}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull/${pr_number}) ${pr_title}"
+            else
+              echo "- Release PR: none created or updated"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
