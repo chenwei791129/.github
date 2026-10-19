@@ -1,0 +1,122 @@
+name: Go Test
+
+# Shared Go test job for all repositories under this account. Callers invoke it
+# with `uses:` so the pinned action SHAs live in exactly one place — bumping
+# setup-go here upgrades every caller on its next run.
+#
+#   jobs:
+#     test:
+#       permissions:
+#         contents: read
+#       uses: chenwei791129/.github/.github/workflows/go-test.yml@main
+#
+# Supply-chain hardening: every third-party action is pinned to a full commit
+# SHA (not a floating tag) so a compromised/retagged release cannot be pulled
+# into the runner. The trailing comment records the human-readable version that
+# SHA corresponds to. When bumping, re-resolve the SHA from the upstream tag
+# (e.g. `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`).
+on:
+  workflow_call:
+    inputs:
+      go-version-file:
+        description: 'File that declares the Go version (go.mod or .go-version)'
+        required: false
+        type: string
+        default: go.mod
+      working-directory:
+        description: 'Directory containing the Go module'
+        required: false
+        type: string
+        default: '.'
+      test-args:
+        description: 'Arguments passed to `go test`; -count=1 is always added so results are never served from cache'
+        required: false
+        type: string
+        default: ./...
+      vet:
+        description: 'Run `go vet ./...` before the tests'
+        required: false
+        type: boolean
+        default: false
+      cache:
+        description: 'Enable the setup-go module/build cache'
+        required: false
+        type: boolean
+        default: true
+      runs-on:
+        description: 'Runner label for the test job'
+        required: false
+        type: string
+        default: ubuntu-26.04
+
+jobs:
+  test:
+    runs-on: ${{ inputs.runs-on }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ${{ inputs.working-directory }}/${{ inputs.go-version-file }}
+          cache: ${{ inputs.cache }}
+          cache-dependency-path: ${{ inputs.working-directory }}/go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: go vet
+        if: ${{ inputs.vet }}
+        run: go vet ./...
+
+      # Output is captured to a file for the summary and echoed to the log so
+      # failures stay readable in the Actions console. pipefail keeps the
+      # `go test` exit code through the pipe.
+      - name: go test
+        id: test
+        shell: bash
+        env:
+          TEST_ARGS: ${{ inputs.test-args }}
+        run: |
+          set -o pipefail
+          # shellcheck disable=SC2086 # TEST_ARGS is intentionally word-split
+          go test -count=1 ${TEST_ARGS} 2>&1 | tee go-test.log
+
+      - name: Write job summary
+        if: ${{ always() && steps.test.outcome != 'skipped' }}
+        env:
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          TEST_ARGS: ${{ inputs.test-args }}
+        run: |
+          passed=0; failed=0; no_tests=0
+          if [[ -f go-test.log ]]; then
+            passed="$(grep -c '^ok ' go-test.log || true)"
+            failed="$(grep -c '^FAIL' go-test.log || true)"
+            no_tests="$(grep -c 'no test files' go-test.log || true)"
+          fi
+          {
+            echo "## Go test"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Result | ${TEST_OUTCOME} |"
+            echo "| Go | \`$(go version | cut -d' ' -f3)\` |"
+            echo "| Arguments | \`${TEST_ARGS}\` |"
+            echo "| Packages passed | ${passed} |"
+            echo "| Packages failed | ${failed} |"
+            echo "| Packages without tests | ${no_tests} |"
+            if [[ "${TEST_OUTCOME}" != "success" && -f go-test.log ]]; then
+              echo
+              echo "<details><summary>Failures</summary>"
+              echo
+              echo '```'
+              grep -E '^(--- FAIL|FAIL|panic:|\s+.*_test\.go:[0-9]+:)' go-test.log | head -200
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
