@@ -87,7 +87,7 @@ on:
         description: 'Runner label for the build job'
         required: false
         type: string
-        default: ubuntu-latest
+        default: ubuntu-26.04
 
 jobs:
   build-multiple-platform:
