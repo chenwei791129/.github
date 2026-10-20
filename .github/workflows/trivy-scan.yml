@@ -46,7 +46,11 @@ on:
         type: boolean
         default: false
       category:
-        description: 'SARIF analysis category; empty uses trivy-<scan-type>. Set distinct values for multiple scans of the same type.'
+        description: >-
+          SARIF analysis category, used only by the SARIF upload; empty uses
+          trivy-<scan-type>. Set distinct values whenever the same scan type
+          uploads more than once in a repository, including from different
+          workflows.
         required: false
         type: string
         default: ''

@@ -134,9 +134,11 @@ The optional string input `category` overrides this value; omitting it or passin
 an empty string uses the default. It only affects SARIF uploads, not the gating
 scan or job summary.
 
-When calling the workflow more than once with the same scan type (for example,
-two images, or separate vulnerability and secret scans), give each call a
-unique, stable category:
+The default category does not include the calling workflow, so it is shared
+across the whole repository. Whenever the same scan type uploads SARIF more
+than once — within one workflow (for example, two images) or from different
+workflows (for example, a vulnerability scan in `trivy.yml` and a secret scan
+in another workflow) — give each call a unique, stable category:
 
 ```yaml
     with:
@@ -146,10 +148,16 @@ unique, stable category:
       category: trivy-image-app
 ```
 
+If a category is uploaded on the default branch but skipped on pull requests
+(such as an `image` job guarded by `if: github.event_name != 'pull_request'`),
+code scanning may warn on pull requests that a configuration from the default
+branch was not found. This is expected and does not affect the uploaded results.
+
 After adopting this change, verify the distinct analysis categories in the
-caller's Security tab after a scheduled or manual run. The initial category
-change may leave the old analysis visible; review it separately rather than
-assuming the new category removes historical results.
+caller's Security tab after a scheduled or manual run. The analysis uploaded
+under the previous default category is not replaced, and its alerts stay open
+on the default branch. Once the new categories appear, delete the old
+configuration under Security → Code scanning → Tool status.
 
 ### Trivy secret scan
 
